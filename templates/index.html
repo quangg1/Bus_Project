@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Map of Bus Stops</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine/dist/leaflet-routing-machine.css" />
+    <style>
+        #map { height: 600px; width: 100%; }
+        .container { margin-top: 20px; }
+    </style>
+</head>
+<body>
+
+<h1>Map of Bus Stops</h1>
+<div id="map"></div>
+<div class="container">
+    <label for="start">Start Point: </label>
+    <input type="text" id="start">
+    
+    <label for="end">End Point: </label>
+    <input type="text" id="end">
+    
+    <button id="find-route">Find Route</button>
+    <button id="reset">Reset</button>
+</div>
+
+<style>
+    .container {
+        display: flex; /* Sử dụng flexbox để các phần tử nằm ngang */
+        align-items: center; /* Căn giữa các phần tử theo chiều dọc */
+        gap: 10px; /* Khoảng cách giữa các phần tử */
+    }
+
+    .container label {
+        margin-right: 5px; /* Khoảng cách giữa label và input */
+    }
+</style>
+
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet-routing-machine/dist/leaflet-routing-machine.js"></script>
+<script>
+    // Khởi tạo bản đồ
+    let map = L.map('map').setView([10.775, 106.700], 13);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+
+    // Đặt phạm vi bản đồ
+    let bounds = [
+        [10.7672, 106.6053], // Góc dưới trái
+        [10.8031, 106.7304]  // Góc trên phải
+    ];
+    map.setMaxBounds(bounds);
+    map.setMinZoom(13);
+    map.setMaxZoom(18);
+    map.on('drag', function () {
+        map.panInsideBounds(bounds);
+    });
+    map.on('click', function (e) {
+        let lat = e.latlng.lat;
+        let lon = e.latlng.lng;
+        // Display coordinates
+        alert(`Coordinates: Latitude ${lat}, Longitude ${lon}`);
+    
+        // Place marker on the map
+        L.marker([lat, lng]).addTo(map)
+            .bindPopup(`Latitude: ${lat.toFixed(5)}, Longitude: ${lon.toFixed(5)}`)
+            .openPopup();
+    });
+
+    // Tạo biến lưu trữ các marker và đường đi
+    let markers = [];
+    let routeControl;
+
+    // Hàm tải trạm xe buýt
+    function loadBusStops() {
+        fetch('/static/bus_stops.json')
+            .then(response => response.json())
+            .then(data => {
+                console.log(data);
+                // Duyệt qua dữ liệu và thêm các marker cho các trạm xe buýt
+                for (const stop_id in data) {
+                    let stop = data[stop_id];
+                    let lat = stop.lat;
+                    let lon = stop.lon;
+                    let stop_name = stop.name;
+
+                    // Tạo marker cho trạm xe buýt
+                    let marker = L.marker([lat, lon]).addTo(map)
+                        .bindPopup(`<b>${stop_name}</b><br>(${lat}, ${lon})`)
+                        .on('click', function () {
+                            map.setView([lat, lon], 16);
+                            document.getElementById('start').value=stop_name;
+                        });
+
+                    // Thêm marker vào danh sách
+                    markers.push(marker);
+                }
+            })
+            .catch(error => console.error('Error:', error));
+    }
+
+    // Hàm tìm đường và vẽ đường đi
+    function findRoute() {
+        // Lấy giá trị điểm bắt đầu và kết thúc
+        let startPoint = document.getElementById('start').value;
+        let endPoint = document.getElementById('end').value;
+    
+        fetch('http://127.0.0.1:5000/found_route', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                start_address: startPoint,
+                end_address: endPoint
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'success') {
+                let routeData = data.data;
+
+                // Xóa route cũ nếu có
+                if (routeControl) {
+                    map.removeControl(routeControl);
+                }
+                markers.forEach(marker => map.removeLayer(marker));
+                markers = [];
+
+                // Chỉ lấy các trạm có trong lộ trình
+                let waypoints = [];
+            // Thêm trạm bắt đầu
+            document.getElementById('start').value=routeData.path[0];
+            waypoints.push(L.latLng(routeData.path[0].lat, routeData.path[0].lon));
+            // Thêm các trạm dọc lộ trình
+            routeData.path.forEach(stop => {
+                waypoints.push(L.latLng(stop.lat, stop.lon));
+            });
+            // Thêm trạm kết thúc
+            waypoints.push(L.latLng(routeData.path[routeData.path.length - 1].lat, routeData.path[routeData.path.length - 1].lon));
+
+            // Tạo route control
+            routeControl = L.Routing.control({
+                waypoints: waypoints,
+                routeWhileDragging: true,
+                createMarker: function(i, waypoint) {
+                    // Chỉ tạo marker cho các trạm có trong lộ trình
+                    return L.marker(waypoint.latLng).bindPopup(`<b>${routeData.stops[i]}</b>`);
+                }
+            }).addTo(map);
+    
+                // Zoom vào lộ trình
+                map.fitBounds(L.latLngBounds(waypoints));
+            } else {
+                alert('Error: ' + data.message);
+            }
+        })
+        .catch(error => console.error('Error:', error));
+    }
+
+    // Hàm reset để hiển thị lại tất cả các marker
+    function resetMap() {
+        // Xóa lộ trình hiện tại nếu có
+        if (routeControl) {
+            map.removeControl(routeControl);
+        }
+
+        // Hiển thị lại tất cả các marker
+        markers.forEach(marker => {
+            marker.addTo(map);
+        });
+        loadBusStops();
+
+        // Xóa các giá trị trong các ô input
+        document.getElementById('start').value = '';
+        document.getElementById('end').value = '';
+    }
+
+    // Tải và hiển thị các trạm xe buýt khi trang web được tải
+    loadBusStops();
+
+    // Thêm sự kiện cho nút tìm đường
+    document.getElementById('find-route').addEventListener('click', function() {
+        findRoute();
+    });
+
+    // Thêm sự kiện cho nút reset
+    document.getElementById('reset').addEventListener('click', function() {
+        resetMap();
+    });
+</script>
+
+</body>
+</html>
