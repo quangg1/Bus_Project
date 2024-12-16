@@ -42,10 +42,13 @@ def haversine(lat1, lon1, lat2, lon2):
     return R * c * 1000  # Chuyển đổi thành mét
 
 # Tải dữ liệu trạm xe buýt trong khu vực
+import requests
+import json
+
 def load_bus_stops():
     url = "https://overpass-api.de/api/interpreter"
 
-# Truy vấn lấy dữ liệu các trạm xe buýt trong khu vực từ Cầu Sài Gòn đến cuối quận Tân Phú
+    # Truy vấn lấy dữ liệu các trạm xe buýt trong khu vực từ Cầu Sài Gòn đến cuối quận Tân Phú
     query_stops = """
     [out:json];
     node["highway"="bus_stop"](10.7672, 106.6053, 10.8031, 106.7304);
@@ -58,17 +61,17 @@ def load_bus_stops():
         return {}
     data_stops = response_stops.json()
 
-# Lưu danh sách các trạm xe buýt với thông tin tọa độ
+    # Lưu danh sách các trạm xe buýt với thông tin tọa độ
     bus_stops = {}
     for element in data_stops.get("elements", []):
         lat = element["lat"]
         lon = element["lon"]
         stop_name = element["tags"].get("name", "Unknown")
-# Kiểm tra xem có id không, nếu không tạo một id mới từ tọa độ
+        # Kiểm tra xem có id không, nếu không tạo một id mới từ tọa độ
         stop_id = element.get("id", f"{lat}_{lon}")
         bus_stops[stop_id] = {"name": stop_name, "lat": lat, "lon": lon, "routes": []}
 
-# Truy vấn tất cả các tuyến xe buýt trong khu vực để tìm các tuyến đi qua các trạm
+    # Truy vấn tất cả các tuyến xe buýt trong khu vực để tìm các tuyến đi qua các trạm
     query_routes = """
     [out:json];
     area["name"="Ho Chi Minh City"]->.searchArea;
@@ -82,26 +85,32 @@ def load_bus_stops():
         return bus_stops
     data_routes = response_routes.json()
 
-# Liên kết các tuyến xe buýt với các trạm dừng
+    # Liên kết các tuyến xe buýt với các trạm dừng, loại bỏ tuyến có dấu gạch ngang trong tên
     for relation in data_routes.get("elements", []):
         route_name = relation.get("tags", {}).get("ref", "Unknown Route")
-    
+        
+        # Loại bỏ tuyến có dấu gạch ngang trong tên
+        if "-" in route_name:
+            continue  # Bỏ qua tuyến có dấu gạch ngang
+
         for member in relation.get("members", []):
             if member["type"] == "node" and member["ref"] in bus_stops:
                 bus_stops[member["ref"]]["routes"].append(route_name)
 
-# Giả sử chúng ta muốn tìm các trạm xe buýt và so sánh chúng
-# (Dùng phương thức .get() để tránh lỗi KeyError)
+    # Giả sử chúng ta muốn tìm các trạm xe buýt và so sánh chúng
+    # (Dùng phương thức .get() để tránh lỗi KeyError)
     route_stops_sorted = []
     for stop_id, info in bus_stops.items():
         for route in info["routes"]:
             route_stops_sorted.append({"id": stop_id, "routes": info["routes"], "lat": info["lat"], "lon": info["lon"]})
 
-# Sắp xếp các trạm theo tên tuyến và tọa độ
+    # Sắp xếp các trạm theo tên tuyến và tọa độ
     route_stops_sorted = sorted(route_stops_sorted, key=lambda x: (x["routes"].index(route) if route in x["routes"] else -1, x["lat"], x["lon"]))
+    
     # Lưu dữ liệu vào file JSON
     with open('bus_stops.json', 'w') as json_file:
         json.dump(bus_stops, json_file)
+
     return bus_stops
     return jsonify(bus_stops)
 
@@ -268,16 +277,38 @@ def get_correct_coordinates_from_file(tram_name, file_path):
                     return lat, lon
     return None, None   # Nếu không tìm thấy trạm trong file
 # Tìm đường đi từ địa chỉ xuất phát đến địa chỉ đích
+def parse_coordinates(address):
+    # Kiểm tra xem chuỗi có định dạng (lat, lon) hay không
+    pattern = r'^\s*\(?\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*\)?\s*$'
+    match = re.match(pattern, address)
+    if match:
+        lat = float(match.group(1))
+        lon = float(match.group(2))
+        return lat, lon
+    return None, None
+# Tìm tuyến chung giữa 2 tuyến
+def find_common_routes(stop1_routes, stop2_routes):
+    # Tìm các tuyến chung giữa hai trạm
+    return list(set(stop1_routes) & set(stop2_routes))
 def find_route(start_address, end_address, start_radius=500, end_radius=500):
     # Chuyển đổi địa chỉ sang tọa độ
-    start_lat, start_lon = geocode_address(start_address)
-    end_lat, end_lon = geocode_address(end_address)
+    start_lat, start_lon = parse_coordinates(start_address)
+    end_lat, end_lon = parse_coordinates(end_address)
+
+# Nếu không phải định dạng (lat, lon), gọi hàm geocode_address
+    if start_lat is None or start_lon is None:
+        start_lat, start_lon = geocode_address(start_address)
+
+    if end_lat is None or end_lon is None:
+        end_lat, end_lon = geocode_address(end_address)
+
     bounds = (10.7672, 106.6053, 10.8031, 106.7304)  # Phạm vi cần kiểm tra
 
-    if  is_within_bounds(start_lat, start_lon, bounds) == False:
+    if  not is_within_bounds(start_lat, start_lon, bounds):
         # Nếu tọa độ không hợp lệ, tìm trong graph.info.txt
         start_lat, start_lon = get_correct_coordinates_from_file(start_address, 'graph_info.txt')
-    if is_within_bounds(end_lat, end_lon, bounds) == False:
+        
+    if not is_within_bounds(end_lat, end_lon, bounds):
         # Nếu tọa độ không hợp lệ, tìm trong graph.info.txt
         end_lat, end_lon = get_correct_coordinates_from_file(end_address, 'graph_info.txt')
     # Tải dữ liệu trạm và tuyến xe buýt
@@ -303,22 +334,33 @@ def find_route(start_address, end_address, start_radius=500, end_radius=500):
 
     # Tìm lộ trình từ `optimal_start_stop` đến `optimal_end_stop`
     path, total_distance_between_stops = dijkstra(graph, optimal_start_stop, optimal_end_stop)
+    path.insert(0, (start_lat, start_lon))
+    path.append((end_lat, end_lon))
+    
+    # Tìm các tuyến thực sự mà 2 trạm đi qua
+    filtered_routes = []
+    for i in range(len(path[1:-1]) - 1):
+        stop1 = path[1:-1][i]
+        stop2 = path[1:-1][i + 1]
+        stop1_routes = bus_stops[stop1]['routes']
+        stop2_routes = bus_stops[stop2]['routes']
+        common_routes = find_common_routes(stop1_routes, stop2_routes)
+        filtered_routes.append(common_routes if common_routes else ['No Common Route'])
     route_data = {
-        'path': path,
-        'stops': [bus_stops[stop]['name'] for stop in path]  # Lấy tên trạm dừng
-    }
+    'path': path[1:-1],  # Bỏ qua trạm đầu và cuối trong path
+    'stops': [bus_stops[stop]['name'] for stop in path[1:-1]],  # Lấy tên các trạm giữa
+    'routes': filtered_routes  # Lấy các tuyến đường của các trạm giữa
+}
     return {"status": "success", "data": route_data}
 
 
-start_address = "Điện Biên Phủ"
-end_address = "Đinh Tiên Hoàng"
-print((geocode_address(end_address)))
-print(get_correct_coordinates_from_file(start_address,'graph_info.txt'))
-print(is_within_bounds(10.8031, 106.7304,(10.7672, 106.6053, 10.8031, 106.7304)))
+start_address="(10.77536, 106.62214)"
+
+end_address="(10.77970, 106.63418)"
+print(find_route(start_address,end_address))
 # Tải dữ liệu trạm và tuyến xe buýt
-bus_stops = load_bus_stops()
-graph = build_graph(bus_stops)
+
 # Tìm trạm khởi đầu tối ưu và trạm kết thúc tối ưu
-find_route(start_address,end_address)
+
 # Ví dụ sử dụng
 # Địa chỉ của điểm xuất phát và điểm đến
