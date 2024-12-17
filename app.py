@@ -29,12 +29,15 @@ def found_route():
     path = result['data']['path']
     stops = result['data']['stops']
     route=result['data']['routes']
+    start_distance=result['data']['start_distance']
+    end_distance =result['data']['end_distance']
+    total_distance=result['data']['total_distance']
 
     # Định dạng lại dữ liệu trả về để phù hợp với yêu cầu frontend
     bus_stops = load_bus_stops()  # Tải lại danh sách trạm xe buýt
     route_data = {
         'path': [{'lat': bus_stops[stop]['lat'], 'lon': bus_stops[stop]['lon']} for stop in path],
-        'stops': stops, 'routes':route
+        'stops': stops, 'routes':route,'start_distance':start_distance,'end_distance':end_distance,'total_distance':total_distance
     }
     print(route_data)
     # Trả về dữ liệu JSON

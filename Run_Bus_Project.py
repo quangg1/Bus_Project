@@ -349,7 +349,10 @@ def find_route(start_address, end_address, start_radius=500, end_radius=500):
     route_data = {
     'path': path[1:-1],  # Bỏ qua trạm đầu và cuối trong path
     'stops': [bus_stops[stop]['name'] for stop in path[1:-1]],  # Lấy tên các trạm giữa
-    'routes': filtered_routes  # Lấy các tuyến đường của các trạm giữa
+    'routes': filtered_routes,  # Lấy các tuyến đường của các trạm giữa
+    'start_distance':start_to_optimal_start_distance,
+    'end_distance':optimal_end_to_end_distance,
+    'total_distance':total_distance_between_stops
 }
     return {"status": "success", "data": route_data}
 

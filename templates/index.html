@@ -178,15 +178,18 @@
                 let waypoints = [];
                 let routeInfoDiv = document.getElementById('bus-route-info');
                 routeInfoDiv.innerHTML = '<h3>Bus Routes Information:</h3>';
-                index=0;
+                routeInfoDiv.innerHTML += '<p>Khoảng cách đến trạm xuất phát: ' + routeData.start_distance + 'm</p>';
+                count=0;
                 // Duyệt qua các điểm dừng để thêm marker và thông tin
                 routeData.path.forEach((stop, index) => {
                     console.log('Stop Data:', stop); // Log dữ liệu từng điểm dừng
 
                     // Kiểm tra và gán giá trị mặc định nếu thiếu
-                    const stopName = routeData.stops[index] || 'Unknown Stop';
-                    const routeName = routeData.routes[index] || 'No Route Info';
-                    index+=1;
+                    const stopName = routeData.stops[count] || 'Unknown Stop';
+                    const routeName = routeData.routes[count] || 'No Route Info';
+                    const total_distance = data.data.total_distance;
+                    console.log('Total Distance:', total_distance);
+                    count+=1;
                     waypoints.push(L.latLng(stop.lat, stop.lon));
 
                     let marker = L.marker([stop.lat, stop.lon])
@@ -195,8 +198,12 @@
                     markers.push(marker);
 
                     // Thêm thông tin vào khu vực bus route
-                    routeInfoDiv.innerHTML += `<p>${index + 1}. ${stopName} - <b>Route: ${routeName}</b></p>`;
+                    routeInfoDiv.innerHTML += `<p>${index + 1}. ${stopName} - <b>Route: ${routeName}</b> </p>`;
+                
                 });
+                routeInfoDiv.innerHTML += '<p> Khoảng cách trạm cuối đến điểm đích: ' + routeData.end_distance + 'm</p>';
+                routeInfoDiv.innerHTML += '<p>Tổng quãng đường: ' + routeData.total_distance + 'm</p>';
+
 
                 // Hiển thị tuyến đường trên bản đồ
                 routeControl = L.Routing.control({
@@ -251,6 +258,7 @@
             if (endMarker) map.removeLayer(endMarker);
             markers.forEach(marker => map.removeLayer(marker));
             markers = [];
+             // Xóa đường đi đã vẽ (polylines) nếu có
             loadBusStops();
             document.getElementById('start').value = '';
             document.getElementById('end').value = '';
