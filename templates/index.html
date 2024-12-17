@@ -136,7 +136,11 @@
                 .bindPopup('End Point')
                 .openPopup();
         });
-
+        // Hàm tách tọa độ từ chuỗi
+        function parseLatLng(point) {
+            const [lat, lng] = point.split(',').map(Number);
+            return L.latLng(lat, lng);
+}
         // Tìm và hiển thị tuyến xe buýt
         function findRoute() {
             let startPoint = document.getElementById('start').value.trim();
@@ -165,20 +169,27 @@
 
             // Kiểm tra nếu dữ liệu hợp lệ
             if (data.status === 'success' && Array.isArray(data.data.path) && data.data.path.length > 0) {
-                let routeData = data.data;
+                    let routeData = data.data;
 
-                // Xóa route và marker cũ
-                if (routeControl) map.removeControl(routeControl);
-                if (startMarker) map.removeLayer(startMarker);
-                if (endMarker) map.removeLayer(endMarker);
-                markers.forEach(marker => map.removeLayer(marker));
-                markers = [];
-
+                    // Xóa route và marker cũ
+                    if (routeControl) map.removeControl(routeControl);
+                    if (startMarker) map.removeLayer(startMarker);
+                    if (endMarker) map.removeLayer(endMarker);
+                    markers.forEach(marker => map.removeLayer(marker));
+                    markers = [];
+                    
+                startMarker = L.marker(parseLatLng(startPoint)).addTo(map)
+                    .bindPopup('<b>Start Point</b>').openPopup();
+                markers.push(startMarker);
+                endMarker = L.marker(parseLatLng(endPoint)).addTo(map)
+                    .bindPopup('<b>End Point</b>').openPopup();
+                markers.push(endMarker);
                 // Khởi tạo waypoint và khu vực thông tin tuyến đường
                 let waypoints = [];
                 let routeInfoDiv = document.getElementById('bus-route-info');
                 routeInfoDiv.innerHTML = '<h3>Bus Routes Information:</h3>';
-                routeInfoDiv.innerHTML += '<p>Khoảng cách đến trạm xuất phát: ' + routeData.start_distance + 'm</p>';
+                let startDistance=routeData.start_distance < 1 ? 0 : routeData.start_distance
+                routeInfoDiv.innerHTML += '<p>Khoảng cách đến trạm xuất phát: ' + startDistance + 'm</p>';
                 count=0;
                 // Duyệt qua các điểm dừng để thêm marker và thông tin
                 routeData.path.forEach((stop, index) => {
@@ -193,7 +204,7 @@
                     waypoints.push(L.latLng(stop.lat, stop.lon));
 
                     let marker = L.marker([stop.lat, stop.lon])
-                        .bindPopup(`<b>${index === 0 ? 'Start Point: ' : ''}${stopName}</b><br>Route: ${routeName}`)
+                        .bindPopup(`<b>${stopName}</b><br>Route: ${routeName}`)
                         .addTo(map);
                     markers.push(marker);
 
@@ -201,7 +212,8 @@
                     routeInfoDiv.innerHTML += `<p>${index + 1}. ${stopName} - <b>Route: ${routeName}</b> </p>`;
                 
                 });
-                routeInfoDiv.innerHTML += '<p> Khoảng cách trạm cuối đến điểm đích: ' + routeData.end_distance + 'm</p>';
+                let endDistance = routeData.end_distance < 1 ? 0 : routeData.end_distance;
+                routeInfoDiv.innerHTML += '<p> Khoảng cách trạm cuối đến điểm đích: ' + endDistance + 'm</p>';
                 routeInfoDiv.innerHTML += '<p>Tổng quãng đường: ' + routeData.total_distance + 'm</p>';
 
 
@@ -256,6 +268,11 @@
             if (routeControl) map.removeControl(routeControl);
             if (startMarker) map.removeLayer(startMarker);
             if (endMarker) map.removeLayer(endMarker);
+            map.eachLayer(layer => {
+                if (layer instanceof L.Polyline) {
+                    map.removeLayer(layer);
+                }
+            });
             markers.forEach(marker => map.removeLayer(marker));
             markers = [];
              // Xóa đường đi đã vẽ (polylines) nếu có

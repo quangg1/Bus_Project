@@ -334,8 +334,8 @@ def find_route(start_address, end_address, start_radius=500, end_radius=500):
 
     # Tìm lộ trình từ `optimal_start_stop` đến `optimal_end_stop`
     path, total_distance_between_stops = dijkstra(graph, optimal_start_stop, optimal_end_stop)
-    path.insert(0, (start_lat, start_lon))
-    path.append((end_lat, end_lon))
+    path.insert(0, (f'{start_lat},{start_lon}'))
+    path.append((f'{end_lat},{end_lon}'))
     
     # Tìm các tuyến thực sự mà 2 trạm đi qua
     filtered_routes = []
@@ -348,6 +348,8 @@ def find_route(start_address, end_address, start_radius=500, end_radius=500):
         filtered_routes.append(common_routes if common_routes else ['No Common Route'])
     route_data = {
     'path': path[1:-1],  # Bỏ qua trạm đầu và cuối trong path
+    'start_path':path[0],
+    'end_path':path[-1],
     'stops': [bus_stops[stop]['name'] for stop in path[1:-1]],  # Lấy tên các trạm giữa
     'routes': filtered_routes,  # Lấy các tuyến đường của các trạm giữa
     'start_distance':start_to_optimal_start_distance,
